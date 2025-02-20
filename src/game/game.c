@@ -13,6 +13,32 @@
 
 // ----- Estruturas -----
 
+// Estrutura que define onde cada informação visível
+// do jogador vai ser mostrada. Para isso, ela contém
+// as coordernadas de início X e início Y
+typedef struct {
+    uint8_t xID;
+    uint8_t yID;
+
+    uint8_t xScore;
+    uint8_t yScore;
+
+    uint8_t xCards[HAND_SIZE];
+    uint8_t yCards[HAND_SIZE];
+} PlayerDisplay;
+
+typedef struct {
+    PlayerDisplay playersDisplay[N_PLAYERS];
+    
+    uint8_t xDiscardTop;
+    uint8_t yDiscardTop;
+
+    uint8_t xChosenCard;
+    uint8_t yChosenCard;
+
+    uint8_t ssd[1024];
+} GameDisplay;
+
 // Estrutura que enumera os possíveis estados do jogo
 typedef enum {
     INIT,
@@ -65,6 +91,7 @@ typedef struct
     uint8_t currentPlayer;
     Card chosenCard;
     int turns;
+    GameDisplay gameDisplay;
 } Game;
 
 // Estrutura de um comando
@@ -109,16 +136,12 @@ void aiProcessChooseSource(Game *game);
 void aiProcessCardAction(Game *game);
 
 // Protótipos das funções para saída
-void displayGameInit(const Game *game);
-void displayCard(const Card *card);
-void displayHand(const Player *player);
-void displayScore(const Player *player);
-void displayDiscardTop(const Game *game);
-void displayChosen(const Game *game);
-void displayFirstMove(const Game *game);
-void displayChooseSource(const Game *game);
-void displayCardAction(const Game *game);
-void displayGameEnd(const Game *game);
+void displayGameInit(Game *game);
+void displayGame(Game *game);
+void displayFirstMove(Game *game);
+void displayChooseSource(Game *game);
+void displayCardAction(Game *game);
+void displayGameEnd(Game *game);
 
 // Constantes
 const Card NULL_CARD = {0, NONE};
@@ -192,8 +215,7 @@ bool commandChooseDeck(Game *game) {
     game->chosenCard = game->deck[game->deckTop];
     game->deckTop++;
 
-    displayChosen(game);
-
+    // TODO: 
     // Manda pegar as cartas de descarte e reembaralhar
     if(game->deckTop == DECK_SIZE) {
 
@@ -209,8 +231,6 @@ bool commandChooseDiscard(Game *game) {
     
     game->chosenCard = game->discard[game->discardTop];
     game->discardTop--;
-
-    displayChosen(game);
 
     return true;
 }
@@ -245,7 +265,6 @@ bool commandFlip(Game *game) {
     }
     
     player->isFaceUp[row][col] = true;
-    displayCard(&player->cards[row][col]);
     
     return true;
 }
@@ -400,65 +419,64 @@ void aiProcessCardAction(Game *game) {
 }
 // ----- Fim das funções utilizadas pela IA -----
 
-void gameLoop() {
-    Game game;
-    initGame(&game);
+void gameLoop(Game *game) {
+    initGame(game);
 
-    while(game.state != GAME_END) {
-        switch(game.state) {
+    while(game->state != GAME_END) {
+        switch(game->state) {
             case INIT:
-                game.state = DEAL;
+                game->state = DEAL;
                 break;
                 
             case DEAL:
-                dealCards(&game);
-                game.state = FIRST_MOVE;
+                dealCards(game);
+                game->state = FIRST_MOVE;
                 break;
             
             case FIRST_MOVE:
                 for(uint8_t p=0; p<N_PLAYERS; p++) {
-                    processFirstMove(&game);
-                    evaluateTurn(&game);
+                    processFirstMove(game);
+                    evaluateTurn(game);
                 }
-                game.state = CHOOSE_SOURCE;
+                game->state = CHOOSE_SOURCE;
                 break;
 
             case CHOOSE_SOURCE:
-                processChooseSource(&game);
-                game.state = CARD_ACTION;
+                processChooseSource(game);
+                game->state = CARD_ACTION;
                 break;
 
             case CARD_ACTION:
-                processCardAction(&game);
-                game.state = EVALUATE;
+                processCardAction(game);
+                game->state = EVALUATE;
                 break;
                 
             case EVALUATE:
-                bool isGameOver = evaluateTurn(&game);
+                bool isGameOver = evaluateTurn(game);
                 if(isGameOver)
-                    game.state = LAST_MOVE;
+                    game->state = LAST_MOVE;
                 else
-                    game.state = CHOOSE_SOURCE;
+                    game->state = CHOOSE_SOURCE;
                 break;
             
             case LAST_MOVE:
                 for(uint8_t p=0; p<N_PLAYERS-1; p++) {
-                    processChooseSource(&game);
-                    processCardAction(&game);
-                    evaluateTurn(&game);
+                    processChooseSource(game);
+                    processCardAction(game);
+                    evaluateTurn(game);
                 }
-                turnAllCards(&game);
-                evaluateTurn(&game);
-                game.state = GAME_END;
+                turnAllCards(game);
+                evaluateTurn(game);
+                game->state = GAME_END;
                 break;
             
             default:
-                game.state = GAME_END;
+                game->state = GAME_END;
                 break;
         }
     }
 
-    endGame(&game);
+    endGame(game);
 }
 
 int comp(const void* a,const void* b) {
@@ -509,6 +527,7 @@ void initGame(Game *game) {
     }
 
     game->state = INIT;
+    displayGameInit(game);
 }
 
 void shuffleDeck(Game *game) {
@@ -563,15 +582,6 @@ bool evaluateTurn(Game *game) {
     // Atualiza a pontuação de todos os jogadores
     for(uint8_t p = 0; p<N_PLAYERS; p++) {
         updateScore(&game->players[p]);
-
-        displayScore(&game->players[p]);
-        displayHand(&game->players[p]);
-    }
-
-    if(game->discardTop != 0)
-        displayDiscardTop(game);
-    else {
-
     }
 
     // Verifica se depois do turno do jogador atual

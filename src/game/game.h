@@ -31,13 +31,9 @@ extern void aiProcessCardAction(Game *game);
 extern char getInput(); 
 
 // Para implementar (Saída)
-extern void displayGameInit(const Game *game);
-extern void displayCard(const Card *card);
-extern void displayHand(const Player *player);
-extern void displayScore(const Player *player);
-extern void displayDiscardTop(const Game *game);
-extern void displayChosen(const Game *game);
-extern void displayFirstMove(const Game *game);
-extern void displayChooseSource(const Game *game);
-extern void displayCardAction(const Game *game);
-extern void displayGameEnd(const Game *game);
+extern void displayGameInit(Game *game);
+extern void displayGame(Game *game);
+extern void displayFirstMove(Game *game);
+extern void displayChooseSource(Game *game);
+extern void displayCardAction(Game *game);
+extern void displayGameEnd(Game *game);

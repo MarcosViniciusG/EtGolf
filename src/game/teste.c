@@ -25,7 +25,7 @@ void printCard(const Card *card) {
     printf("%c ", suits[card->suit]);
 }
 
-void displayGameInit(const Game *game) {
+void displayGameInit(Game *game) {
     printf("Jogo iniciando...\n");
 }
 
@@ -41,32 +41,32 @@ void printHand(const Player *player) {
     printf("\n");
 }
 
-void displayCard(const Card *card) {
-    printCard(card);
-    printf("\n");
+void displayHand(Game *game) {
+    for(uint8_t p=0; p<N_PLAYERS; p++) {
+        printHand(&game->players[p]);
+    }
 }
 
-void displayHand(const Player *player) {
-    printHand(player);
-}
-
-void displayScore(const Player *player) {
-    printf("Pontuação do jogador %d: %d\n", player->ID, player->score);
+void displayScore(Game *game) {
+    for(uint8_t p=0; p<N_PLAYERS; p++) {
+        printf("Jogador: %d\n", game->players[p].ID);
+        printf("Pontuação do jogador %d: %d pontos\n", game->players[p].ID, game->players[p].score);
+    }
 } 
 
-void displayDiscardTop(const Game *game) {
+void displayDiscardTop(Game *game) {
     printf("Topo do descarte:\n");
     printCard(&game->discard[game->discardTop]);
     printf("\n");
 }
 
-void displayChosen(const Game *game) {
+void displayChosen(Game *game) {
     printf("Carta escolhida:\n");
     printCard(&game->chosenCard);
     printf("\n");
 }
 
-void displayFirstMove(const Game *game) {
+void displayFirstMove(Game *game) {
     const Player *player = &game->players[game->currentPlayer];
 
     printf("\nTurno do jogador %u:\n", player->ID);
@@ -77,7 +77,7 @@ void displayFirstMove(const Game *game) {
     printf("  (A) Revela a carta selecionada\n");
 }
 
-void displayChooseSource(const Game *game) {
+void displayChooseSource(Game *game) {
     const Player *player = &game->players[game->currentPlayer];
 
     printf("\nTurno do jogador %u:\n", player->ID);
@@ -87,7 +87,7 @@ void displayChooseSource(const Game *game) {
     printf("  (B) Pegar do topo pilha de descarte (Se tiver alguma)\n");
 }
 
-void displayCardAction(const Game *game) {
+void displayCardAction(Game *game) {
     const Player *player = &game->players[game->currentPlayer];
 
     printf("\nTurno do jogador %u:\n", player->ID);
@@ -101,7 +101,7 @@ void displayCardAction(const Game *game) {
     printf("  (B) Revela a carta selecionada\n");
 }
 
-void displayGameEnd(const Game *game) {
+void displayGameEnd(Game *game) {
     for(uint8_t p=0; p<N_PLAYERS; p++) {
         printf("%d. ", p+1);
         printf("Jogador %d com %d pontos\n", game->players[p].ID, game->players[p].score);
@@ -118,6 +118,7 @@ char getInput() {
 }
 
 int main() {
-    gameLoop();
+    Game game;
+    gameLoop(&game);
     return 0;
 }
