@@ -7,8 +7,7 @@ extern void dealCards(Game *game);
 extern bool evaluateTurn(Game *game);         
 extern bool allCardsFaceUp(const Player *player); 
 extern void endGame(Game *game);              
-extern void updateScore(Player *player);           
-extern char getInput();                       
+extern void updateScore(Player *player);                                 
 extern void turnAllCards(Game *game);         
 
 extern bool commandLeft(Game *game);
@@ -28,6 +27,10 @@ extern void aiProcessFirstMove(Game *game);
 extern void aiProcessChooseSource(Game *game);
 extern void aiProcessCardAction(Game *game);
 
+// Para implementar (Entrada)
+extern char getInput(); 
+
+// Para implementar (Saída)
 extern void displayGameInit(const Game *game);
 extern void displayCard(const Card *card);
 extern void displayHand(const Player *player);

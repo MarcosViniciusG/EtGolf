@@ -8,27 +8,106 @@
 #include "pico/binary_info.h"
 #include "inc/ssd1306.h"
 #include "hardware/i2c.h"
+#include "game/game.h"
 
-const uint I2C_SDA = 14;
-const uint I2C_SCL = 15;
+#define X_PIN 27
+#define Y_PIN 26
 
-int main() {
-    stdio_init_all();
+#define BUTTON_A 5
+#define BUTTON_B 6
+
+#define I2C_SDA 14
+#define I2C_SCL 15
+
+#define JOYSTICK_LEFT_THRESHOLD   1500
+#define JOYSTICK_RIGHT_THRESHOLD  2500
+#define JOYSTICK_UP_THRESHOLD     1500
+#define JOYSTICK_DOWN_THRESHOLD   2500
+
+// Implementação da função getInput()
+char getInput() {
+    char input;
+    bool done = false;
+
+    while(!done) {
+        bool button_a_state = gpio_get(BUTTON_A);
+        bool button_b_state = gpio_get(BUTTON_B);
+
+        adc_select_input(1);
+        uint16_t adc_x = adc_read();
+
+        adc_select_input(0);
+        uint16_t adc_y = adc_read();
+
+        if(!button_a_state && !done) {
+            input = 'A';
+            done = true;
+        }
+        else if(!button_b_state && !done) {
+            input = 'B';
+            done = true;
+        }
+
+        if (adc_x < JOYSTICK_LEFT_THRESHOLD && !done) {
+            input = 'L';
+            done = true;
+        } 
+        else if (adc_x > JOYSTICK_RIGHT_THRESHOLD && !done) {
+            input = 'R';
+            done = true;
+        }
+
+        if (adc_y < JOYSTICK_UP_THRESHOLD && !done) {
+            input = 'D';
+            done = true;
+        } else if (adc_y > JOYSTICK_DOWN_THRESHOLD && !done) {
+            input = 'U';
+            done = true;
+        }
+
+        // Delay para evitar problemas de debounce
+        sleep_ms(100);
+    }
+
+    return input;
+}
+
+// Inicialização dos botões
+void initButtons() {
+    gpio_init(BUTTON_A);
+    gpio_set_dir(BUTTON_A, GPIO_IN);
+    gpio_pull_up(BUTTON_A);
+
+    gpio_init(BUTTON_B);
+    gpio_set_dir(BUTTON_B, GPIO_IN);
+    gpio_pull_up(BUTTON_B);
+}
+
+// Inicialização do joystick
+void initJoystick() {
     adc_init();
-    // Make sure GPIO is high-impedance, no pullups etc
-    adc_gpio_init(26);
-    adc_gpio_init(27);
+    adc_gpio_init(Y_PIN);
+    adc_gpio_init(X_PIN);
+}
 
-    sleep_ms(1000);
-    // Inicialização do i2c
+// Inicialização do display
+void initDisplay() {
     i2c_init(i2c1, ssd1306_i2c_clock * 1000);
     gpio_set_function(I2C_SDA, GPIO_FUNC_I2C);
     gpio_set_function(I2C_SCL, GPIO_FUNC_I2C);
     gpio_pull_up(I2C_SDA);
     gpio_pull_up(I2C_SCL);
 
-    // Processo de inicialização completo do OLED SSD1306
     ssd1306_init();
+}
+
+int main() {
+    // Inicialização
+    stdio_init_all();
+    initButtons();
+    initJoystick();
+    sleep_ms(1000);
+    initDisplay();
 
     // Preparar área de renderização para o display (ssd1306_width pixels por ssd1306_n_pages páginas)
     struct render_area frame_area = {
@@ -40,43 +119,21 @@ int main() {
 
     calculate_render_area_buffer_length(&frame_area);
 
-    // zera o display inteiro
+    // Zera o display inteiro
     uint8_t ssd[ssd1306_buffer_length];
     memset(ssd, 0, ssd1306_buffer_length);
     render_on_display(ssd, &frame_area);
 
-    restart:
-
     while (1) {
-        adc_select_input(1);
-        uint adc_x_raw = adc_read();
-        adc_select_input(0);
-        uint adc_y_raw = adc_read();
-
-        // Display the joystick position something like this:
-        // X: [            o             ]  Y: [              o         ]
-        const uint bar_width = 15;
-        const uint adc_max = (1 << 12) - 1;
-        uint bar_x_pos = adc_x_raw * bar_width / adc_max;
-        uint bar_y_pos = adc_y_raw * bar_width / adc_max;
-
-        char text[2][15];
-
-        for (uint i = 0; i < bar_width; ++i)
-            text[0][i] = ( i == bar_x_pos ? 'o' : ' '); 
-
-        for (uint i = 0; i < bar_width; ++i)
-            text[1][i] = ( i == bar_y_pos ? 'o' : ' '); 
-
-        int y = 0;
-        for (uint i = 0; i < count_of(text); i++)
-        {   
-            ssd1306_draw_string(ssd, 5, y, text[i]);
-            y += 8;
-        }
+        char text[1] = {'a'};
+        text[0] = getInput();
+        int y=0;
+        ssd1306_draw_string(ssd, 5, y, text);
 
         render_on_display(ssd, &frame_area);
 
-        sleep_ms(100);
+        sleep_ms(250);
+        memset(ssd, 0, ssd1306_buffer_length);
+        render_on_display(ssd, &frame_area);
     }
 }
