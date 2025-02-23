@@ -106,7 +106,6 @@ int find_key(const char *json, jsmntok_t *tokens, int num_tokens, const char *ke
     return -1;
 }
 
-/* Helper: Converts the JSON token to an integer. */
 int json_to_int(const char *json, jsmntok_t *token)
 {
     char buf[32];
@@ -131,7 +130,6 @@ bool JSONToGame(Game *game)
         return false;
     }
 
-    // Extract top-level game fields
     int idx = find_key(remoteGameState, tokens, num_tokens, "gameMode");
     if (idx != -1)
         game->gameMode = json_to_int(remoteGameState, &tokens[idx]);
@@ -155,13 +153,17 @@ bool JSONToGame(Game *game)
     idx = find_key(remoteGameState, tokens, num_tokens, "turns");
     if (idx != -1)
         game->turns = json_to_int(remoteGameState, &tokens[idx]);
+    
+    idx = find_key(remoteGameState, tokens, num_tokens, "turns");
+    if (idx != -1) {
+        if((GameState) json_to_int(remoteGameState, &tokens[idx]) == GAME_END)
+            game->turns = GAME_END;
+    }
 
-    // Parse the chosenCard object
     idx = find_key(remoteGameState, tokens, num_tokens, "chosenCard");
     if (idx != -1)
     {
         jsmntok_t *cardObj = &tokens[idx];
-        // cardObj should be an object with two keys ("suit" and "value")
         for (int j = idx + 1; j < idx + 1 + cardObj->size * 2 && j < num_tokens; j++)
         {
             int keyLen = tokens[j].end - tokens[j].start;
@@ -179,7 +181,6 @@ bool JSONToGame(Game *game)
         }
     }
 
-    // Process the "players" array
     idx = find_key(remoteGameState, tokens, num_tokens, "players");
     if (idx == -1)
         return false;
@@ -188,15 +189,13 @@ bool JSONToGame(Game *game)
         return false;
 
     int playerCount = playersToken->size;
-    int tokenIndex = idx + 1; // Points to the first player object token
+    int tokenIndex = idx + 1; 
     for (int i = 0; i < playerCount && i < N_PLAYERS; i++)
     {
         jsmntok_t *playerObj = &tokens[tokenIndex];
         if (playerObj->type != JSMN_OBJECT)
             return false;
-        int objSize = playerObj->size; // Number of key/value pairs for this player
-
-        // Parse "ID" (stored as a string in JSON)
+        int objSize = playerObj->size;
         for (int j = tokenIndex + 1; j < tokenIndex + 1 + objSize * 2 && j < num_tokens; j++)
         {
             int keyLen = tokens[j].end - tokens[j].start;
@@ -215,7 +214,6 @@ bool JSONToGame(Game *game)
             }
         }
 
-        // Parse "score"
         for (int j = tokenIndex + 1; j < tokenIndex + 1 + objSize * 2 && j < num_tokens; j++)
         {
             int keyLen = tokens[j].end - tokens[j].start;
@@ -228,7 +226,6 @@ bool JSONToGame(Game *game)
             }
         }
 
-        // Parse "cards" array (a flat array representing a matrix)
         for (int j = tokenIndex + 1; j < tokenIndex + 1 + objSize * 2 && j < num_tokens; j++)
         {
             int keyLen = tokens[j].end - tokens[j].start;
@@ -240,14 +237,14 @@ bool JSONToGame(Game *game)
                 jsmntok_t *cardsToken = &tokens[cardsIdx];
                 if (cardsToken->type != JSMN_ARRAY)
                     break;
-                int totalCards = cardsToken->size; // should equal HAND_SIZE * HAND_SIZE
+                int totalCards = cardsToken->size;
                 int cardTokenIndex = cardsIdx + 1;
                 for (int cardIndex = 0; cardIndex < totalCards && cardIndex < HAND_SIZE * HAND_SIZE; cardIndex++)
                 {
                     jsmntok_t *cardObj = &tokens[cardTokenIndex];
                     if (cardObj->type != JSMN_OBJECT)
                         break;
-                    int cardObjSize = cardObj->size; // Expected to be 2: "suit" and "value"
+                    int cardObjSize = cardObj->size;
                     int suit = 0, value = 0;
                     for (int k = cardTokenIndex + 1; k < cardTokenIndex + 1 + cardObjSize * 2 && k < num_tokens; k++)
                     {
@@ -268,14 +265,12 @@ bool JSONToGame(Game *game)
                     int col = cardIndex % HAND_SIZE;
                     game->players[i].cards[row][col].suit = suit;
                     game->players[i].cards[row][col].value = value;
-                    // Advance past the card object tokens:
                     cardTokenIndex += 1 + (cardObj->size * 2);
                 }
                 break;
             }
         }
 
-        // Parse "isFaceUp" array (flat array representing a boolean matrix)
         for (int j = tokenIndex + 1; j < num_tokens && tokens[j].start < playerObj->end; j++)
         {
             int keyLen = tokens[j].end - tokens[j].start;
@@ -285,7 +280,7 @@ bool JSONToGame(Game *game)
             {
                 int faceIdx = j + 1;
                 jsmntok_t *faceToken = &tokens[faceIdx];
-                int totalFaces = faceToken->size; // should equal HAND_SIZE * HAND_SIZE
+                int totalFaces = faceToken->size; 
                 int faceTokenIndex = faceIdx + 1;
                 for (int faceIndex = 0; faceIndex < totalFaces && faceIndex < HAND_SIZE * HAND_SIZE; faceIndex++)
                 {
@@ -296,7 +291,6 @@ bool JSONToGame(Game *game)
                     strncpy(tokenBuf, remoteGameState + tokens[faceTokenIndex].start, tokenLen);
                     tokenBuf[tokenLen] = '\0';
 
-                    // Convert token to integer and treat nonzero as true.
                     int numVal = atoi(tokenBuf);
                     int row = faceIndex / HAND_SIZE;
                     int col = faceIndex % HAND_SIZE;
@@ -307,7 +301,6 @@ bool JSONToGame(Game *game)
             }
         }
 
-        // Parse "selectedRow" and "selectedColumn" for this player
         for (int j = tokenIndex + 1; j < num_tokens && tokens[j].start < playerObj->end; j++)
         {
             int keyLen = tokens[j].end - tokens[j].start;
@@ -324,7 +317,6 @@ bool JSONToGame(Game *game)
             }
         }
 
-        // Advance tokenIndex to the next player object
         int nextTokenIndex = tokenIndex + 1;
         while (nextTokenIndex < num_tokens && tokens[nextTokenIndex].start < playerObj->end)
         {
@@ -369,11 +361,11 @@ static err_t http_client_connected(void *arg, struct tcp_pcb *tpcb, err_t err)
 
     char request[128];
     char input='D';
-    if(sendRemote) {
-        JSONToGame(game);
-        displayGame(game);
-        render_on_display(gameDisplay->ssd, &frame_area);
+    JSONToGame(game);
+    displayGame(game);
+    render_on_display(gameDisplay->ssd, &frame_area);
 
+    if(sendRemote) {
         sendRemote = false;
         input = getInput();
     }

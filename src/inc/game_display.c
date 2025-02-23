@@ -19,24 +19,29 @@ void clearDisplay(GameDisplay *gameDisplay) {
     sleep_ms(50);
 }
 
-void cardToString(const Card *card, char str[2]) {
-    const char suits[] = {'H', 'D', 'C', 'S', 'M'};
+void cardToString(const Card *card, char *str) {
+    const char suits[] = {'H', 'D', 'C', 'S', '$'};
 
+    uint8_t off=0;
     if(card->value == -1) 
-        str[0] = 'M';
+        str[off] = '$';
     else if(card->value == 0)
-        str[0] = 'K';
+        str[off] = 'K';
     else if(card->value == 1)
-        str[0] = 'A';
-    else if(card->value == 10)
-        str[0] = 'Z';
+        str[off] = 'A';
+    else if(card->value == 10) {
+        str[off] = '1';
+        off++;
+        str[off] = '0';
+    }
     else if(card->value == 11)
-        str[0] = 'J';
+        str[off] = 'J';
     else if(card->value == 12)
-        str[0] = 'Q';
+        str[off] = 'Q';
     else
-        str[0] = card->value + '0';
+        str[off] = card->value + '0';
     
+    off++;
     str[1] = suits[card->suit];
 }
 
@@ -94,7 +99,7 @@ void displayHand(Game *game) {
                     ssd1306_draw_string(gameDisplay->ssd, playerDisplay->xCards[col], playerDisplay->yCards[row], "OO");
                 }     
                 else if(isFaceUp) {
-                    char str[2];
+                    char str[3];
                     cardToString(card, str);
                     ssd1306_draw_string(gameDisplay->ssd, playerDisplay->xCards[col], playerDisplay->yCards[row], str);
                 }
@@ -123,7 +128,7 @@ void displayDiscardTop(Game *game) {
     uint8_t discardTop = game->discardTop;
     if(discardTop != 0) {
         Card *card = &game->discard[game->discardTop];
-        char str[2];
+        char str[3];
         cardToString(card, str);
         ssd1306_draw_string(gameDisplay->ssd, gameDisplay->xDiscardTop, gameDisplay->yDiscardTop, str);
     }
@@ -133,7 +138,7 @@ void displayChosen(Game *game) {
     GameDisplay *gameDisplay = &game->gameDisplay;
     Card *card = &game->chosenCard;
     if((card->value != NULL_CARD.value || card->suit != NULL_CARD.suit) && game->state!=CHOOSE_SOURCE) {
-        char str[2];
+        char str[3];
         cardToString(card, str);
         ssd1306_draw_string(gameDisplay->ssd, gameDisplay->xChosenCard, gameDisplay->yChosenCard, str);
     }

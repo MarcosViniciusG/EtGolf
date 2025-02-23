@@ -110,7 +110,7 @@ typedef struct
 typedef bool (*CommandFunc)(Game *game);
 
 typedef struct {
-    char code;       // e.g., 'L', 'R', etc.
+    char code;
     CommandFunc execute;
 } Command;
 // ----- Fim das estruturas -----
@@ -372,6 +372,9 @@ void processFirstMove(Game *game) {
                 input = getRemoteInput(game);
             }
         }
+        else {
+            input = getInput();
+        }
         bool processed = false;
         for (uint8_t i = 0; i < numFirstMoveCommands; i++) {
             if (input == firstMoveCommands[i].code && moves < 2) {
@@ -409,6 +412,9 @@ void processChooseSource(Game *game) {
                 input = getRemoteInput(game);
             }
         }
+        else {
+            input = getInput();
+        }
         bool found = false;
         for (uint8_t i = 0; i < numChooseSourceCommands; i++) {
             if (input == chooseSourceCommands[i].code) {
@@ -441,6 +447,9 @@ void processCardAction(Game *game) {
             else if(game->currentPlayer == 1) {
                 input = getRemoteInput(game);
             }
+        }
+        else {
+            input = getInput();
         }
         bool processed = false;
         for (uint8_t i = 0; i < numCardActionCommands; i++) {
@@ -548,16 +557,16 @@ void gameLoop(Game *game) {
                 break;
 
             case CLIENT_WAIT:
+                receiveGameState(game);
+
                 if(game->currentPlayer==1) {
                     sendRemoteInput();
                 }
-
-                receiveGameState(game);
                 break;
 
             case INIT:
                 initGame(game);
-                if(game->gameMode==SERVER)
+                if(game->gameMode==SERVER || game->gameMode==VS_AI)
                     game->state = DEAL;
                 else if(game->gameMode==CLIENT)
                     game->state = CLIENT_WAIT;
