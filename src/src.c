@@ -305,7 +305,7 @@ void displayGameEnd(Game *game)
     render_on_display(gameDisplay->ssd, &frame_area);
     sleep_ms(5000);
     clearDisplay(gameDisplay);
-    ssd1306_draw_string(gameDisplay->ssd, 5, 5, "VENCEDOR: ");
+    ssd1306_draw_string(gameDisplay->ssd, 5, 5, "PERDEDOR: ");
     snprintf(playerString, sizeof(playerString), "JOGADOR %d", game->players[1].ID);
     ssd1306_draw_string(gameDisplay->ssd, 5, 14, playerString);
     render_on_display(gameDisplay->ssd, &frame_area);
