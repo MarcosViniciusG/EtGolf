@@ -47,6 +47,11 @@
         "functional": "c",
         "tuple": "c",
         "type_traits": "c",
-        "utility": "c"
+        "utility": "c",
+        "tcp.h": "c",
+        "wifi.h": "c",
+        "cyw43_arch.h": "c",
+        "stdio.h": "c",
+        "stdlib.h": "c"
     }
 }

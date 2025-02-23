@@ -35,7 +35,7 @@ pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(src src.c )
+add_executable(src src.c)
 
 pico_set_program_name(src "src")
 pico_set_program_version(src "0.1")
@@ -50,7 +50,7 @@ target_link_libraries(src
 
 # Add any user requested libraries
 target_link_libraries(src
-        pico_cyw43_arch_none
+        pico_cyw43_arch_lwip_threadsafe_background
         hardware_adc
         hardware_i2c
         )

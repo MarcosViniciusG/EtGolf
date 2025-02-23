@@ -1,14 +1,15 @@
 #include <stdio.h>
 #include "pico/stdlib.h"
 #include "hardware/adc.h"
+#include "pico/cyw43_arch.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
 #include "pico/binary_info.h"
-#include "inc/ssd1306.h"
+#include "inc/wifi.h"
+#include "inc/http.h"
 #include "hardware/i2c.h"
-#include "game/game.h"
 
 // ----- Macros -----
 #define X_PIN 27
@@ -27,12 +28,8 @@
 // ----- Fim dos macros -----
 
 // Variáveis globais 
-struct render_area frame_area = {
-    start_column : 0,
-    end_column : ssd1306_width - 1,
-    start_page : 0,
-    end_page : ssd1306_n_pages - 1
-};
+bool WIFI_INITIATED = false;
+bool WIFI_CONNECTED = false;
 
 // ----- Implementação das funções de entrada -----
 // Implementação da função getInput()
@@ -82,155 +79,136 @@ char getInput() {
 
     return input;
 }
+
+char getRemoteInput(Game *game) {
+    // Enquanto o remote input não mudar, somente manda os dados
+    while(remoteInput=='#') {
+        sleep_ms(50);
+    }
+    char input = remoteInput;
+    remoteInput='#';
+    return input;
+}
+
+void sendRemoteInput() {
+    sendRemote = true;
+}
 // ----- Fim da implementação das funções de entrada -----
 
-// ----- Funções auxiliares -----
-void clearDisplay(GameDisplay *gameDisplay) {
-    memset(gameDisplay->ssd , 0, 1024);
-    render_on_display(gameDisplay->ssd, &frame_area);
-}
-
-void cardToString(const Card *card, char str[2]) {
-    const char suits[] = {'H', 'D', 'C', 'S', 'M'};
-
-    if(card->value == -1) 
-        str[0] = 'M';
-    else if(card->value == 0)
-        str[0] = 'K';
-    else if(card->value == 1)
-        str[0] = 'A';
-    else if(card->value == 10)
-        str[0] = 'Z';
-    else if(card->value == 11)
-        str[0] = 'J';
-    else if(card->value == 12)
-        str[0] = 'Q';
-    else
-        str[0] = card->value + '0';
-    
-    str[1] = suits[card->suit];
-}
-
-// Fonte: https://www.geeksforgeeks.org/how-to-convert-an-integer-to-a-string-in-c/
-void intToStr(int N, char *str) {
-    int i = 0;
-  
-    // Save the copy of the number for sign
-    int sign = N;
-
-    // If the number is negative, make it positive
-    if (N < 0)
-        N = -N;
-
-    // Extract digits from the number and add them to the
-    // string
-    while (N > 0) {
-      
-        // Convert integer digit to character and store
-      	// it in the str
-        str[i++] = N % 10 + '0';
-      	N /= 10;
-    } 
-
-    // If the number was negative, add a minus sign to the
-    // string
-    if (sign < 0) {
-        str[i++] = '-';
+// Tenta conectar ao WiFi
+bool initWifi(Game *game) {
+    GameDisplay *gameDisplay = &game->gameDisplay;
+    clearDisplay(gameDisplay);
+    if (cyw43_arch_init()) {
+        ssd1306_draw_string(gameDisplay->ssd, 5, 32, "ERRO AO");
+        ssd1306_draw_string(gameDisplay->ssd, 5, 40, "INICIALIZAR WIFI");
+        render_on_display(gameDisplay->ssd, &frame_area);
+        sleep_ms(3000);
+        return false;
     }
 
-    // Null-terminate the string
-    str[i] = '\0';
+    cyw43_arch_enable_sta_mode();
 
-    // Reverse the string to get the correct order
-    for (int j = 0, k = i - 1; j < k; j++, k--) {
-        char temp = str[j];
-        str[j] = str[k];
-        str[k] = temp;
-    }
+    return true;
 }
 
-void displayHand(Game *game) {
+bool connectWifi(Game *game) {
+    if(!WIFI_INITIATED)
+        return false;
+
     GameDisplay *gameDisplay = &game->gameDisplay;
     clearDisplay(gameDisplay);
 
-    for(uint8_t p=0; p<N_PLAYERS; p++) {
-        PlayerDisplay *playerDisplay = &gameDisplay->playersDisplay[p];
-        Player *player = &game->players[p];
-
-        for(uint8_t row=0; row<HAND_SIZE; row++) {
-            for(uint8_t col=0; col<HAND_SIZE; col++) {
-                Card *card = &player->cards[row][col];
-                bool isFaceUp = player->isFaceUp[row][col];
-                if(row == player->selectedRow && col == player->selectedColumn && !player->isAi) {
-                    ssd1306_draw_string(gameDisplay->ssd, playerDisplay->xCards[col], playerDisplay->yCards[row], "OO");
-                }     
-                else if(isFaceUp) {
-                    char str[2];
-                    cardToString(card, str);
-                    ssd1306_draw_string(gameDisplay->ssd, playerDisplay->xCards[col], playerDisplay->yCards[row], str);
-                }
-                else {
-                    ssd1306_draw_string(gameDisplay->ssd, playerDisplay->xCards[col], playerDisplay->yCards[row], "WW");
-                }
-            }
-        }
+    ssd1306_draw_string(gameDisplay->ssd, 5, 32, "CONECTANDO...");
+    render_on_display(gameDisplay->ssd, &frame_area);
+    // Altere em inc/wifi.h caso queira mudar a rede WiFi
+    if (cyw43_arch_wifi_connect_timeout_ms(WIFI_SSID, WIFI_PASS, CYW43_AUTH_WPA2_AES_PSK, 10000)) {
+        clearDisplay(gameDisplay);
+        ssd1306_draw_string(gameDisplay->ssd, 5, 32, "ERRO AO");
+        ssd1306_draw_string(gameDisplay->ssd, 5, 40, "CONECTAR WIFI");
+        render_on_display(gameDisplay->ssd, &frame_area);
+        sleep_ms(3000);
+        return false;
     }
+
+    clearDisplay(gameDisplay);
+    ssd1306_draw_string(gameDisplay->ssd, 5, 32, "CONECTADO AO");
+    ssd1306_draw_string(gameDisplay->ssd, 5, 40, WIFI_SSID);
+    render_on_display(gameDisplay->ssd, &frame_area);
+    sleep_ms(3000);
+    return true;
 }
 
-void displayScore(Game *game) {
+bool setupServer(Game *game) {
     GameDisplay *gameDisplay = &game->gameDisplay;
-    for(uint8_t p=0; p<N_PLAYERS; p++) {
-        PlayerDisplay *playerDisplay = &gameDisplay->playersDisplay[p];
-        Player *player = &game->players[p];
+    clearDisplay(gameDisplay);
+    ssd1306_draw_string(gameDisplay->ssd, 5, 32, "ABRINDO SERVIDOR...");
+    render_on_display(gameDisplay->ssd, &frame_area);
 
-        char str[3];
-        intToStr(player->score, str);
-        ssd1306_draw_string(gameDisplay->ssd, playerDisplay->xScore, playerDisplay->yScore, str);
-    }
+    sleep_ms(1000);
+    clearDisplay(gameDisplay);
+
+    uint8_t *ip_address = (uint8_t*)&(cyw43_state.netif[0].ip_addr.addr);
+    char buffer[50];
+    sprintf(buffer, "%d.%d.%d.%d", ip_address[0], ip_address[1], ip_address[2], ip_address[3]);
+    ssd1306_draw_string(gameDisplay->ssd, 5, 32, buffer);
+    render_on_display(gameDisplay->ssd, &frame_area);
+
+    start_http_server();
+
+    sleep_ms(10000);
 }
 
-void displayDiscardTop(Game *game) {
+void getServerIp(ip_addr_t *serverIp) {
+    IP4_ADDR(serverIp, 192, 168, 18, 54);
+}
+
+void receiveGameState(Game *game) {
     GameDisplay *gameDisplay = &game->gameDisplay;
-    uint8_t discardTop = game->discardTop;
-    if(discardTop != 0) {
-        Card *card = &game->discard[game->discardTop];
-        char str[2];
-        cardToString(card, str);
-        ssd1306_draw_string(gameDisplay->ssd, gameDisplay->xDiscardTop, gameDisplay->yDiscardTop, str);
+    struct tcp_pcb *pcb = tcp_new();
+    tcp_arg(pcb, game);
+    ip_addr_t serverIp;
+    getServerIp(&serverIp); 
+    err_t erro = tcp_connect(pcb, &serverIp, 80, http_client_connected);
+    if(erro!=ERR_OK) {
+        clearDisplay(gameDisplay);
+        ssd1306_draw_string(gameDisplay->ssd, 5, 5, "ESPERE");
+        render_on_display(gameDisplay->ssd, &frame_area);
     }
 }
 
-void displayChosen(Game *game) {
-    GameDisplay *gameDisplay = &game->gameDisplay;
-    Card *card = &game->chosenCard;
-    if(card->value != NULL_CARD.value || card->suit != NULL_CARD.suit) {
-        char str[2];
-        cardToString(card, str);
-        ssd1306_draw_string(gameDisplay->ssd, gameDisplay->xChosenCard, gameDisplay->yChosenCard, str);
-    }
-
-}
 // ----- Fim das funções auxiliares -----
 
 // ----- Implementação das funções de saída -----
+void displayChooseGameMode(Game *game) {
+    GameDisplay *gameDisplay = &game->gameDisplay;
+    clearDisplay(gameDisplay);
+
+    char *text[] = {
+        "VS AI",
+        "SERVER",
+        "CLIENT"
+    };
+
+    int y = 32;
+    for(uint8_t i=0; i<count_of(text); i++) {
+        if(game->selectedGameMode==i) {
+            ssd1306_draw_string(gameDisplay->ssd, 5, y, "=>");
+        }
+
+        ssd1306_draw_string(gameDisplay->ssd, 25, y, text[i]);
+        y+=8;
+    } 
+
+    render_on_display(gameDisplay->ssd, &frame_area);
+}
+
 void displayGameInit(Game *game) {
     GameDisplay *gameDisplay = &game->gameDisplay;
     clearDisplay(gameDisplay);
     ssd1306_draw_string(gameDisplay->ssd, 5, 32, "INICIO DO JOGO");
     render_on_display(gameDisplay->ssd, &frame_area);
     sleep_ms(3000);
-}
-
-void displayGame(Game *game) {
-    GameDisplay *gameDisplay = &game->gameDisplay;
-    clearDisplay(gameDisplay);
-
-    displayHand(game);
-    displayScore(game);
-    displayDiscardTop(game);
-    displayChosen(game);
-
-    render_on_display(gameDisplay->ssd, &frame_area);
 }
 
 void displayFirstMove(Game *game) {
@@ -253,6 +231,21 @@ void displayGameEnd(Game *game) {
     displayGame(game);
 }
 // ----- Fim da implementação das funções de saída -----
+
+// ----- Implementação das funções de rede -----
+bool setupNetwork(Game *game) {
+
+    if(!WIFI_INITIATED) 
+        WIFI_INITIATED = initWifi(game);
+    
+    WIFI_CONNECTED = connectWifi(game);
+
+    bool status = true;
+    if(game->gameMode==SERVER && WIFI_CONNECTED)
+        status = setupServer(game);
+
+    return (WIFI_INITIATED && WIFI_CONNECTED && status);
+}
 
 // Inicialização dos botões
 void initButtons() {

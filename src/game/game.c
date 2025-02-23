@@ -9,6 +9,7 @@
 #define DECK_SIZE 54
 #define HAND_SIZE 3
 #define N_PLAYERS 2
+#define N_GAME_MODES 3
 // ------ Fim dos macros -----
 
 // ----- Estruturas -----
@@ -41,6 +42,9 @@ typedef struct {
 
 // Estrutura que enumera os possíveis estados do jogo
 typedef enum {
+    CHOOSE_MODE,
+    SETUP_NETWORK,
+    CLIENT_WAIT,
     INIT,
     DEAL,
     PLAYER_TURN,
@@ -51,6 +55,12 @@ typedef enum {
     LAST_MOVE,
     GAME_END
 } GameState;
+
+typedef enum {
+    VS_AI,
+    SERVER,
+    CLIENT
+} GameMode;
 
 // Estrutura que enumera os possíveis naipes das cartas
 typedef enum {
@@ -82,6 +92,8 @@ typedef struct
 // Estrutura que define o jogo
 typedef struct
 {
+    GameMode gameMode;
+    uint8_t selectedGameMode;
     GameState state;
     Card deck[DECK_SIZE];
     uint8_t deckTop;
@@ -116,6 +128,9 @@ char getInput();                       // Função que pega a entrada
 void turnAllCards(Game *game);         // Quando o jogo finalizar, vira todas as cartas 
 
 // Protótipos dos possíveis comandos do jogo
+bool commandChooseGameMode(Game *game);// Escolher o modo de jogo
+bool commandUpChooseGameMode(Game *game); // Cima na seleção de modo de jogo
+bool commandDownChooseGameMode(Game *game); // Baixo na seleção de modo de jogo
 bool commandLeft(Game *game);          // Esquerda
 bool commandRight(Game *game);         // Direita
 bool commandUp(Game *game);            // Cima
@@ -126,6 +141,7 @@ bool commandFlip(Game *game);          // Vira a carta selecionada na mão
 bool commandReplace(Game *game);       // Substitui a carta selecionada na mão
 
 // Protótipos das funções processadoras dos comandos
+void processChooseGameMode(Game *game); // Escolhe o modo de jogo
 void processFirstMove(Game *game);     // Primeiro movimento do jogo
 void processChooseSource(Game *game);  // Escolher a fonte da carta escolhida
 void processCardAction(Game *game);    // Escolher uma ação com a carta
@@ -136,6 +152,7 @@ void aiProcessChooseSource(Game *game);
 void aiProcessCardAction(Game *game);
 
 // Protótipos das funções para saída
+void displayChooseGameMode(Game *game);
 void displayGameInit(Game *game);
 void displayGame(Game *game);
 void displayFirstMove(Game *game);
@@ -143,10 +160,25 @@ void displayChooseSource(Game *game);
 void displayCardAction(Game *game);
 void displayGameEnd(Game *game);
 
+// Protótipos das funções de rede
+bool setupNetwork(Game *game);
+void sendGameState(Game *game);
+void receiveGameState(Game *game);
+char getRemoteInput();
+void sendRemoteInput();
+void closeServer();
+
 // Constantes
 const Card NULL_CARD = {0, NONE};
 
 // ----- Contextualização dos comandos -----
+Command chooseGameModeCommands[] = {
+    { 'U', commandUpChooseGameMode },
+    { 'D', commandDownChooseGameMode },
+    { 'A', commandChooseGameMode }
+};
+uint8_t numChooseGameModeCommands = sizeof(chooseGameModeCommands) / sizeof(chooseGameModeCommands[0]);
+
 Command chooseSourceCommands[] = {
     { 'A', commandChooseDeck },
     { 'B', commandChooseDiscard }
@@ -174,6 +206,30 @@ uint8_t numFirstMoveCommands = sizeof(firstMoveCommands) / sizeof(firstMoveComma
 // ----- Fim da contextualização dos comandos -----
 
 // ----- Implementação dos comandos -----
+bool commandChooseGameMode(Game *game) {
+    uint8_t selectedGameMode = game->selectedGameMode;
+    if(selectedGameMode < 0 || selectedGameMode >= 3)
+        return false;
+
+    const GameMode gameMode[N_GAME_MODES] = {VS_AI, SERVER, CLIENT};
+    game->gameMode = gameMode[selectedGameMode];
+
+    return true;
+}
+
+bool commandUpChooseGameMode(Game *game) {
+    if(game->selectedGameMode==0)
+        game->selectedGameMode = N_GAME_MODES - 1;
+    else
+        game->selectedGameMode--;
+    return true;
+}
+
+bool commandDownChooseGameMode(Game *game) {
+    game->selectedGameMode = (game->selectedGameMode + 1) % N_GAME_MODES;
+    return true;
+}
+
 bool commandLeft(Game *game) {
     Player *player = &game->players[game->currentPlayer];
 
@@ -271,6 +327,32 @@ bool commandFlip(Game *game) {
 // ----- Fim da implementação dos comandos -----
 
 // ----- Implementação das funções processadoras -----
+void processChooseGameMode(Game *game) {
+    game->selectedGameMode = 0; 
+    
+    bool done = false;
+    bool found = false;
+    char input;
+    while (!done) {
+        displayChooseGameMode(game);
+        input = getInput();
+        bool found = false;
+        for (uint8_t i = 0; i < numChooseGameModeCommands; i++) {
+            if (input == chooseGameModeCommands[i].code) {
+                if(input == 'A')
+                    done = chooseGameModeCommands[i].execute(game);
+                chooseGameModeCommands[i].execute(game);
+                found = 1;
+                break;
+            }
+        }
+        if (!found) {
+
+        }
+    }
+    return;
+}
+
 void processFirstMove(Game *game) {
     char input;
     uint8_t moves=0;
@@ -282,7 +364,14 @@ void processFirstMove(Game *game) {
 
     while (moves < 2) {
         displayFirstMove(game);
-        input = getInput();
+        if(game->gameMode==SERVER) {
+            if(game->currentPlayer == 0) {
+                input = getInput();
+            }
+            else if(game->currentPlayer == 1) {
+                input = getRemoteInput(game);
+            }
+        }
         bool processed = false;
         for (uint8_t i = 0; i < numFirstMoveCommands; i++) {
             if (input == firstMoveCommands[i].code && moves < 2) {
@@ -312,7 +401,14 @@ void processChooseSource(Game *game) {
 
     while (!done) {
         displayChooseSource(game);
-        input = getInput();
+        if(game->gameMode==SERVER) {
+            if(game->currentPlayer == 0) {
+                input = getInput();
+            }
+            else if(game->currentPlayer == 1) {
+                input = getRemoteInput(game);
+            }
+        }
         bool found = false;
         for (uint8_t i = 0; i < numChooseSourceCommands; i++) {
             if (input == chooseSourceCommands[i].code) {
@@ -338,7 +434,14 @@ void processCardAction(Game *game) {
 
     while (!done) {
         displayCardAction(game);
-        input = getInput();
+        if(game->gameMode==SERVER) {
+            if(game->currentPlayer == 0) {
+                input = getInput();
+            }
+            else if(game->currentPlayer == 1) {
+                input = getRemoteInput(game);
+            }
+        }
         bool processed = false;
         for (uint8_t i = 0; i < numCardActionCommands; i++) {
             if (input == cardActionCommands[i].code) {
@@ -420,12 +523,44 @@ void aiProcessCardAction(Game *game) {
 // ----- Fim das funções utilizadas pela IA -----
 
 void gameLoop(Game *game) {
-    initGame(game);
+    game->state = CHOOSE_MODE;
 
     while(game->state != GAME_END) {
         switch(game->state) {
+            case CHOOSE_MODE:
+                processChooseGameMode(game);
+                if(game->gameMode==SERVER || game->gameMode==CLIENT) {
+                    game->state = SETUP_NETWORK;
+                }
+                else {
+                    game->state = INIT;
+                }
+                break;
+            
+            case SETUP_NETWORK:
+                // Se a rede foi configurada com sucesso
+                if(setupNetwork(game)) {
+                    game->state = INIT;
+                }
+                else {
+                    game->state = CHOOSE_MODE;
+                }
+                break;
+
+            case CLIENT_WAIT:
+                if(game->currentPlayer==1) {
+                    sendRemoteInput();
+                }
+
+                receiveGameState(game);
+                break;
+
             case INIT:
-                game->state = DEAL;
+                initGame(game);
+                if(game->gameMode==SERVER)
+                    game->state = DEAL;
+                else if(game->gameMode==CLIENT)
+                    game->state = CLIENT_WAIT;
                 break;
                 
             case DEAL:
@@ -520,10 +655,15 @@ void initGame(Game *game) {
         game->players[p].selectedColumn = 0;
         game->players[p].selectedRow = 0;
         game->players[p].ID = p+1;
-        if(!p)
-            game->players[p].isAi = false;
-        else
-            game->players[p].isAi = true;
+    }
+
+    if(game->gameMode == VS_AI) {
+        game->players[0].isAi = false;
+        game->players[1].isAi = true;
+    }
+    else {
+        game->players[0].isAi = false;
+        game->players[1].isAi = false;
     }
 
     game->state = INIT;
